@@ -7,7 +7,12 @@ export const ensureSessionId = (): string => {
   let sessionId = localStorage.getItem("sessionId");
   
   if (!sessionId) {
-    sessionId = Math.random().toString(36).substring(2, 15);
+    // Generate a pseudo-UUID
+    sessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
     localStorage.setItem("sessionId", sessionId);
   }
   
@@ -17,11 +22,17 @@ export const ensureSessionId = (): string => {
 // Get cart data from the API
 export const useCart = () => {
   // Ensure we have a session ID before fetching cart
-  ensureSessionId();
+  const sessionId = ensureSessionId();
   
   return useQuery({
     queryKey: ["/api/cart"],
     staleTime: 0,
+    // Force a refetch when the component mounts
+    refetchOnMount: true,
+    // Make sure the session ID is evaluated here which helps ensure it exists
+    meta: {
+      sessionId
+    }
   });
 };
 
