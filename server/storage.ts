@@ -6,8 +6,18 @@ import {
   CartItem, InsertCartItem,
   Quiz, InsertQuiz,
   QuizQuestion, InsertQuizQuestion,
-  QuizOption, InsertQuizOption
+  QuizOption, InsertQuizOption,
+  products,
+  orders,
+  orderItems,
+  carts,
+  cartItems,
+  quizzes,
+  quizQuestions,
+  quizOptions
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, desc } from "drizzle-orm";
 
 // Interface for all storage methods
 export interface IStorage {
@@ -514,4 +524,204 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// DatabaseStorage implements IStorage using PostgreSQL and Drizzle ORM
+export class DatabaseStorage implements IStorage {
+  // Product methods
+  async getProducts(): Promise<Product[]> {
+    return db.select().from(products);
+  }
+
+  async getProduct(id: number): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    return product;
+  }
+
+  async getFeaturedProducts(): Promise<Product[]> {
+    return db.select().from(products).where(eq(products.isFeatured, true));
+  }
+
+  async getProductsByCollection(collection: string): Promise<Product[]> {
+    return db.select().from(products).where(
+      eq(products.collection, collection)
+    );
+  }
+
+  async getProductsByCategory(category: string): Promise<Product[]> {
+    return db.select().from(products).where(
+      eq(products.category, category)
+    );
+  }
+
+  async createProduct(insertProduct: InsertProduct): Promise<Product> {
+    const [product] = await db.insert(products).values(insertProduct).returning();
+    return product;
+  }
+
+  async updateProduct(id: number, updates: Partial<Product>): Promise<Product | undefined> {
+    const [updatedProduct] = await db
+      .update(products)
+      .set(updates)
+      .where(eq(products.id, id))
+      .returning();
+    return updatedProduct;
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    const result = await db.delete(products).where(eq(products.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Order methods
+  async getOrders(): Promise<Order[]> {
+    return db.select().from(orders).orderBy(desc(orders.createdAt));
+  }
+
+  async getOrder(id: number): Promise<Order | undefined> {
+    const [order] = await db.select().from(orders).where(eq(orders.id, id));
+    return order;
+  }
+
+  async getOrdersByUserId(userId: string): Promise<Order[]> {
+    return db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
+  }
+
+  async createOrder(insertOrder: InsertOrder): Promise<Order> {
+    const [order] = await db.insert(orders).values(insertOrder).returning();
+    return order;
+  }
+
+  async updateOrderStatus(id: number, status: string): Promise<Order | undefined> {
+    const [updatedOrder] = await db
+      .update(orders)
+      .set({ status })
+      .where(eq(orders.id, id))
+      .returning();
+    return updatedOrder;
+  }
+
+  // Order items methods
+  async getOrderItems(orderId: number): Promise<OrderItem[]> {
+    return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  }
+
+  async createOrderItem(insertOrderItem: InsertOrderItem): Promise<OrderItem> {
+    const [orderItem] = await db.insert(orderItems).values(insertOrderItem).returning();
+    return orderItem;
+  }
+
+  // Cart methods
+  async getCart(sessionId: string): Promise<Cart | undefined> {
+    const [cart] = await db.select().from(carts).where(eq(carts.sessionId, sessionId));
+    return cart;
+  }
+
+  async createCart(insertCart: InsertCart): Promise<Cart> {
+    const [cart] = await db.insert(carts).values(insertCart).returning();
+    return cart;
+  }
+
+  async deleteCart(id: number): Promise<boolean> {
+    const result = await db.delete(carts).where(eq(carts.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Cart items methods
+  async getCartItems(cartId: number): Promise<CartItem[]> {
+    return db.select().from(cartItems).where(eq(cartItems.cartId, cartId));
+  }
+
+  async getCartItem(cartId: number, productId: number, color: string, size: string): Promise<CartItem | undefined> {
+    const [cartItem] = await db.select().from(cartItems).where(
+      and(
+        eq(cartItems.cartId, cartId),
+        eq(cartItems.productId, productId),
+        eq(cartItems.color, color),
+        eq(cartItems.size, size)
+      )
+    );
+    return cartItem;
+  }
+
+  async createCartItem(insertCartItem: InsertCartItem): Promise<CartItem> {
+    const [cartItem] = await db.insert(cartItems).values(insertCartItem).returning();
+    return cartItem;
+  }
+
+  async updateCartItemQuantity(id: number, quantity: number): Promise<CartItem | undefined> {
+    const [updatedCartItem] = await db
+      .update(cartItems)
+      .set({ quantity })
+      .where(eq(cartItems.id, id))
+      .returning();
+    return updatedCartItem;
+  }
+
+  async deleteCartItem(id: number): Promise<boolean> {
+    const result = await db.delete(cartItems).where(eq(cartItems.id, id));
+    return result.rowCount > 0;
+  }
+
+  // Quiz methods
+  async getQuizzes(): Promise<Quiz[]> {
+    return db.select().from(quizzes);
+  }
+
+  async getQuiz(id: number): Promise<Quiz | undefined> {
+    const [quiz] = await db.select().from(quizzes).where(eq(quizzes.id, id));
+    return quiz;
+  }
+
+  async getQuizWithQuestionsAndOptions(id: number): Promise<{ 
+    quiz: Quiz, 
+    questions: (QuizQuestion & { options: QuizOption[] })[] 
+  } | undefined> {
+    const quiz = await this.getQuiz(id);
+    if (!quiz) return undefined;
+
+    const questions = await this.getQuizQuestions(id);
+    const questionsWithOptions = await Promise.all(
+      questions.map(async (question) => {
+        const options = await this.getQuizOptions(question.id);
+        return { ...question, options };
+      })
+    );
+
+    return {
+      quiz,
+      questions: questionsWithOptions
+    };
+  }
+
+  async createQuiz(insertQuiz: InsertQuiz): Promise<Quiz> {
+    const [quiz] = await db.insert(quizzes).values(insertQuiz).returning();
+    return quiz;
+  }
+
+  // Quiz questions and options methods
+  async getQuizQuestions(quizId: number): Promise<QuizQuestion[]> {
+    return db.select()
+      .from(quizQuestions)
+      .where(eq(quizQuestions.quizId, quizId))
+      .orderBy(quizQuestions.order);
+  }
+
+  async createQuizQuestion(insertQuestion: InsertQuizQuestion): Promise<QuizQuestion> {
+    const [question] = await db.insert(quizQuestions).values(insertQuestion).returning();
+    return question;
+  }
+
+  async getQuizOptions(questionId: number): Promise<QuizOption[]> {
+    return db.select()
+      .from(quizOptions)
+      .where(eq(quizOptions.questionId, questionId))
+      .orderBy(quizOptions.order);
+  }
+
+  async createQuizOption(insertOption: InsertQuizOption): Promise<QuizOption> {
+    const [option] = await db.insert(quizOptions).values(insertOption).returning();
+    return option;
+  }
+}
+
+// Use the database storage
+export const storage = new DatabaseStorage();
