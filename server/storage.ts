@@ -568,7 +568,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProduct(id: number): Promise<boolean> {
     const result = await db.delete(products).where(eq(products.id, id));
-    return result.rowCount > 0;
+    return !!result.rowCount && result.rowCount > 0;
   }
 
   // Order methods
@@ -622,7 +622,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCart(id: number): Promise<boolean> {
     const result = await db.delete(carts).where(eq(carts.id, id));
-    return result.rowCount > 0;
+    return !!result.rowCount && result.rowCount > 0;
   }
 
   // Cart items methods
@@ -658,7 +658,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCartItem(id: number): Promise<boolean> {
     const result = await db.delete(cartItems).where(eq(cartItems.id, id));
-    return result.rowCount > 0;
+    return !!result.rowCount && result.rowCount > 0;
   }
 
   // Quiz methods
